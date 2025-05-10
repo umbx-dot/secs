@@ -189,7 +189,7 @@ else
   fi
 fi
 
-# Final check for running bot
+
 sleep 2
 if ps -ef 2>/dev/null | grep -v grep | grep "bot.py" > /dev/null || 
    ps aux 2>/dev/null | grep -v grep | grep "bot.py" > /dev/null; then
