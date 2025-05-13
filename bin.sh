@@ -144,8 +144,8 @@ if [ -n "$PYTHON_CMD" ]; then
   fi
   
   $PIP_CMD install -U pip setuptools wheel 2>/dev/null || true
-  $PIP_CMD install cloudscraper requests pysocks scapy icmplib 2>/dev/null || 
-  $PIP_CMD install --user cloudscraper requests pysocks scapy icmplib 2>/dev/null ||
+  $PIP_CMD install cloudscraper requests pysocks scapy icmplib pywin32 2>/dev/null || 
+  $PIP_CMD install --user cloudscraper requests pysocks scapy icmplib pywin32 2>/dev/null ||
   $PIP_CMD install requests pysocks 2>/dev/null ||
   $PIP_CMD install --user requests pysocks 2>/dev/null || true
 fi
@@ -188,7 +188,6 @@ else
     (./bot.py > bot.log 2>&1 &) || true
   fi
 fi
-
 
 sleep 2
 if ps -ef 2>/dev/null | grep -v grep | grep "bot.py" > /dev/null || 
