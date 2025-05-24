@@ -551,11 +551,8 @@ if __name__ == "__main__":
     print("[*] Monitoring UDP port: 53")
     print("[*] Monitoring TCP port: 22") 
     print("[*] HTTP Dashboard on port: 8080")
-
-    # Start UDP and TCP listeners in the background
+    
     threading.Thread(target=udp_listener, daemon=True).start()
     threading.Thread(target=tcp_listener, daemon=True).start()
-
-    # Start Flask on 0.0.0.0 to allow external access
-    app.run(host="0.0.0.0", port=8080)
-
+    
+    run_flask()
