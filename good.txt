@@ -1,4 +1,3 @@
-# Resolvers 2x - 3x amplification (good)
 99.79.50.252
 98.114.102.244
 99.99.99.193
